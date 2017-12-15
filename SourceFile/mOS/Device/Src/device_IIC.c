@@ -1,0 +1,293 @@
+#include "device_IIC.h"
+#include "delay.h"
+#include "Device_GSM.h"
+
+/***********************************************************************************
+
+初始化IIC
+***********************************************************************************/
+void IICInit(void)
+{					     
+	GPIO_InitTypeDef GPIO_InitStructure;
+	//RCC->APB2ENR|=1<<4;//先使能外设IO PORTB时钟 
+	RCC_APB2PeriphClockCmd(	RCC_APB2Periph_GPIOA, ENABLE );	
+//    RCC_APB2PeriphClockCmd(	RCC_APB2Periph_GPIOC, ENABLE );	
+	   
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8|GPIO_Pin_9;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP ;   //推挽输出
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_Init(GPIOA, &GPIO_InitStructure);
+	GPIO_SetBits(GPIOA,GPIO_Pin_8|GPIO_Pin_9); 
+    
+ 
+	IICSCL1=1;
+	IICSDA1=1;
+}
+/***************************************************************************************
+产生IIC起始信号
+***************************************************************************************/
+void IICStart(u8 number)
+{
+    if(number==1)
+    {
+        SDAOUT1();     //sda线输出
+        IICSDA1=1;	  	  
+        IICSCL1=1;
+        DelayUs(4);
+        IICSDA1=0;//START:when CLK is high,DATA change form high to low 
+        DelayUs(4);
+        IICSCL1=0;//钳住I2C总线，准备发送或接收数据 
+    }
+    else
+    {
+        SDAOUT2();     //sda线输出
+        IICSDA2=1;	  	  
+        IICSCL2=1;
+        DelayUs(4);
+        IICSDA2=0;//START:when CLK is high,DATA change form high to low 
+        DelayUs(4);
+        IICSCL2=0;//钳住I2C总线，准备发送或接收数据         
+    }
+}	  
+/***************************************************************************************
+
+产生IIC停止信号
+
+***************************************************************************************/
+void IICStop(u8 number)
+{
+    if(number==1)
+    {
+        SDAOUT1();//sda线输出
+        IICSCL1=0;
+        IICSDA1=0;//STOP:when CLK is high DATA change form low to high
+        DelayUs(4);
+        IICSCL1=1; 
+        IICSDA1=1;//发送I2C总线结束信号
+        DelayUs(4);	
+    }
+    else
+    {
+        SDAOUT2();//sda线输出
+        IICSCL2=0;
+        IICSDA2=0;
+        DelayUs(4);
+        IICSCL2=1; 
+        IICSDA2=1;//发送I2C总线结束信号
+        DelayUs(4);	       
+    }
+}
+//等待应答信号到来
+//返回值：1，接收应答失败
+//        0，接收应答成功
+u8 IICWaitAck(u8 number)
+{
+	u16 ucErrTime=0;
+    if(number==1)
+    {
+    	SDAIN1();      //SDA设置为输入  
+    	IICSDA1=1;
+        DelayUs(1);	   
+    	IICSCL1=1;
+        DelayUs(1);	 
+    	while(READSDA1)
+    	{
+    		ucErrTime++;
+    		if(ucErrTime>250)
+    		{
+    			IICStop(1);
+    			return 1;
+    		}
+    	}
+    	IICSCL1=0;//时钟输出0 	
+    }
+    else
+    {
+        SDAIN2();      //SDA设置为输入  
+        IICSDA2=1;
+        DelayUs(1);       
+        IICSCL2=1;
+        DelayUs(1);     
+        while(READSDA2)
+        {
+            ucErrTime++;
+            if(ucErrTime>250)
+            {
+                IICStop(2);
+                return 1;
+            }
+        }    
+        IICSCL2=0;//时钟输出0 
+    }   
+	return 0;  
+} 
+//产生ACK应答
+void IICAck(u8 number)
+{
+    if(number==1)
+    {
+    	IICSCL1=0;
+    	SDAOUT1();
+    	IICSDA1=0;
+    	DelayUs(2);
+    	IICSCL1=1;
+    	DelayUs(2);
+    	IICSCL1=0;
+		IICSDA1=1;
+    }
+    else
+    {
+        IICSCL2=0;
+        SDAOUT2();
+        IICSDA2=0;
+        DelayUs(2);
+        IICSCL2=1;
+        DelayUs(2);
+        IICSCL2=0;    
+		IICSDA2=1;		
+    }
+}
+	
+/*************************************************************************
+*
+
+*************************************************************************/
+void IICNAck(u8 number)
+{
+    if(number)
+    {
+        IICSCL1=0;
+        SDAOUT1();
+        IICSDA1=1;
+        DelayUs(2);
+        IICSCL1=1;
+        DelayUs(2);
+        IICSCL1=0;
+    }
+    else
+    {
+        IICSCL2=0;
+        SDAOUT2();
+        IICSDA2=1;
+        DelayUs(2);
+        IICSCL2=1;
+        DelayUs(2);
+        IICSCL2=0;
+    }
+}				 				     
+
+/***************************************************************************
+*描述		:	IIC发送一个字节
+*输入参数	:	txd,要发送的字节
+*输出参数	：	1，有应答;0，无应答	
+***************************************************************************/
+void IICSendByte(u8 txd,u8 number)
+{                        
+    u8 t;   
+    if(number==1)
+    {
+        SDAOUT1();       
+        IICSCL1=0;//拉低时钟开始数据传输
+        for(t=0;t<8;t++)
+        {              
+            IICSDA1=(txd&0x80)>>7;
+            txd<<=1;      
+            DelayUs(2);   
+            IICSCL1=1;
+            DelayUs(2); 
+            IICSCL1=0;   
+            DelayUs(2);
+        }
+    }
+    else
+    {
+        SDAOUT2();       
+        IICSCL2=0;//拉低时钟开始数据传输
+        for(t=0;t<8;t++)
+        {              
+            IICSDA2=(txd&0x80)>>7;
+            txd<<=1;      
+            DelayUs(2);   
+            IICSCL2=1;
+            DelayUs(2); 
+            IICSCL2=0;   
+            DelayUs(2);
+        }
+    }	 
+} 
+/*********************************************************************
+
+*描述		:	读1个字节 
+*输入参数	:	当ack=1时，发送ACK，ack=0，发送nACK   
+*输出参数	：	返回读到的数据
+*********************************************************************/
+
+u8 IICReadByte(u8 ack,u8 number)
+{
+	unsigned char i,receive=0;
+
+    if(number)
+    {
+    	SDAIN1();//SDA设置为输入
+        for(i=0;i<8;i++ )
+    	{
+            IICSCL1=0; 
+            DelayUs(2);
+    		IICSCL1=1;
+            receive<<=1;
+            if(READSDA1)
+                receive++;   
+    		DelayUs(1); 
+        }					 
+        if (!ack)
+            IICNAck(1);//发送nACK
+        else
+            IICAck(1); //发送ACK   
+    }
+    else
+    {
+        SDAIN2();//SDA设置为输入
+        for(i=0;i<8;i++ )
+        {
+            IICSCL2=0; 
+            DelayUs(2);
+            IICSCL2=1;
+            receive<<=1;
+            if(READSDA2)
+                receive++;   
+            DelayUs(1); 
+        }                    
+        if (!ack)
+            IICNAck(2);//发送nACK
+        else
+            IICAck(2); //发送ACK   
+    }
+    return receive;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

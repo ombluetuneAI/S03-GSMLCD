@@ -1,0 +1,37 @@
+#ifndef __DEVICE_IIC_H
+#define __DEVICE_IIC_H
+#include "sys.h"
+	  
+
+ 
+//IO方向设置
+#define SDAIN1()  {GPIOA->CRH&=0XFFF0FFFF;GPIOA->CRH|=8<<16;}
+#define SDAOUT1() {GPIOA->CRH&=0XFFF0FFFF;GPIOA->CRH|=3<<16;}
+
+#define SDAIN2()  {GPIOC->CRH&=0XFFF0FFFF;GPIOA->CRH|=8<<14;}
+#define SDAOUT2() {GPIOC->CRH&=0XFFF0FFFF;GPIOA->CRH|=3<<14;}
+
+//IO操作函数	 
+#define IICSCL1    PAout(11) //SCL
+#define IICSDA1    PAout(12) //SDA	 
+#define READSDA1   PAin(12)  //输入SDA 
+
+#define IICSCL2    PCout(11)
+#define IICSDA2    PCout(10)
+#define READSDA2   PCin(10)
+
+//IIC所有操作函数
+void IICInit(void);                //初始化IIC的IO口				 
+void IICStart(void);				//发送IIC开始信号
+void IICStop(void);	  			//发送IIC停止信号
+void IICSendByte(u8 txd);			//IIC发送一个字节
+u8 IICReadByte(unsigned char ack);//IIC读取一个字节
+u8 IICWaitAck(void); 				//IIC等待ACK信号
+void IICAck(void);					//IIC发送ACK信号
+void IICNAck(void);				//IIC不发送ACK信号
+
+void IICWriteOneByte(u8 daddr,u8 addr,u8 data);
+u8 IICRead_OneByte(u8 daddr,u8 addr);	  
+#endif
+
+
